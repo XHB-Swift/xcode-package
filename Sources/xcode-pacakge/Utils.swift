@@ -14,10 +14,11 @@ extension Process {
     @discardableResult
     static func process(_ cmd: String) -> String {
         let process = Process()
+        process.arguments = ["-c", cmd]
         let pipe = Pipe()
         process.standardOutput = pipe
         if #available(macOS 10.13, *) {
-            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
             do {
                 try process.run()
             } catch {
@@ -41,5 +42,38 @@ extension Process {
             return String(data: data, encoding: .utf8) ?? ""
         }
     }
+}
+
+enum MessageLevel {
+    case success(content: Any?)
+    case warning(content: Any?)
+    case failure(content: Any?)
+    
+    func printMessage() {
+        var printedMessage = ""
+        switch self {
+        case .success(let content):
+            printedMessage.append(String(describing: content).green)
+        case .warning(let content):
+            printedMessage.append(String(describing: content).yellow)
+        case .failure(let content):
+            printedMessage.append(String(describing: content).red)
+        }
+        log(message: printedMessage)
+    }
+}
+
+func log(file: String = #file,
+         function: String = #function,
+         line: Int = #line,
+         message: Any?,
+         title: String = "") {
+    var content = "----------\(title)-----------\n"
+    content.append("file: \(file)\n")
+    content.append("function: \(function)\n")
+    content.append("line: \(line)\n")
+    content.append("content: \(message ?? "")\n")
+    content.append("----------------------------")
+    Swift.print(content)
 }
 
