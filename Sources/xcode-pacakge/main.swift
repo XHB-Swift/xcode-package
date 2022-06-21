@@ -92,9 +92,11 @@ struct PackageHepler: ParsableCommand {
                                scheme: scheme,
                                destination: .platform_iOS_Simulator,
                                archivePath: "\(outputPath)/\(scheme)-\(iphonesimulator).xcarchive")
-        [frw, simFrw].forEach { f in
+        let frameworks = [frw, simFrw]
+        frameworks.forEach { f in
             self.archive(framework: f)
         }
+        archive(xcframework: frameworks, outputPath: outputPath)
     }
 }
 
@@ -126,6 +128,22 @@ extension PackageHepler {
             PackageHepler.exit(withError: result.red)
         }
     }
+    
+    private func archive(xcframework frameworks: [Framework], outputPath: String) {
+        if frameworks.isEmpty { return }
+        var buildCmd = "xcodebuild -create-xcframework "
+        frameworks.forEach { framework in
+            let frameworkPath = "\(framework.archivePath)/Products/Library/Frameworks/\(framework.scheme).framework"
+            buildCmd.append(contentsOf: "-framework \(frameworkPath) ")
+        }
+        let output = "\(outputPath)/\(scheme).xcframework"
+        buildCmd.append(contentsOf: "-output \(output)")
+        let result = Process.process(buildCmd)
+        if !result.isEmpty {
+            PackageHepler.exit(withError: result.red)
+        }
+    }
 }
 
-PackageHepler.main(["/Users/cc/Desktop/LocalLab/TestXCFrw/TestXCFrw.xcodeproj", "TestXCFrw"])
+//PackageHepler.main(["/Users/cc/Desktop/LocalLab/TestXCFrw/TestXCFrw.xcodeproj", "TestXCFrw"])
+//PackageHepler.main(["/Users/xiehongbiao123/Desktop/iOSDemo/TestFrw/TestFrw.xcodeproj", "TestFrw"])
