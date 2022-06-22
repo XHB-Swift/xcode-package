@@ -45,34 +45,37 @@ extension Process {
 }
 
 enum MessageLevel {
+    case tips(content: Any?)
     case success(content: Any?)
     case warning(content: Any?)
     case failure(content: Any?)
     
-    func printMessage() {
+    var messageText: String {
         var printedMessage = ""
         switch self {
+        case .tips(let content):
+            printedMessage.append("\(content ?? "")".lightYellow)
         case .success(let content):
-            printedMessage.append(String(describing: content).green)
+            printedMessage.append("\(content ?? "")".green)
         case .warning(let content):
-            printedMessage.append(String(describing: content).yellow)
+            printedMessage.append("\(content ?? "")".yellow)
         case .failure(let content):
-            printedMessage.append(String(describing: content).red)
+            printedMessage.append("\(content ?? "")".red)
         }
-        log(message: printedMessage)
+        return printedMessage
     }
 }
 
 func log(file: String = #file,
          function: String = #function,
          line: Int = #line,
-         message: Any?,
+         message: MessageLevel,
          title: String = "") {
     var content = "----------\(title)-----------\n"
     content.append("file: \(file)\n")
     content.append("function: \(function)\n")
     content.append("line: \(line)\n")
-    content.append("content: \(message ?? "")\n")
+    content.append("content: \(message.messageText)\n")
     content.append("----------------------------")
     Swift.print(content)
 }
