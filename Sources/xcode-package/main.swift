@@ -58,20 +58,12 @@ struct XcodebuildCommand {
     }
     
     private let main = "xcodebuild"
-    var option: String
-    var project: String
-    var scheme: String
+    var option: String = ""
     
     var params: [Params] = []
     
     var executedCmd: String {
         var cmd = "\(main) \(option) "
-        if project.hasSuffix(".xcodeproj") {
-            cmd.append("-project \(project) ")
-        } else if project.hasSuffix(".xcworkspace") {
-            cmd.append("-workspace \(project) ")
-        }
-        cmd.append("-scheme \(scheme) ")
         if !params.isEmpty {
             let paramsCmd = params.map { $0.cmd }.joined(separator: " ")
             cmd.append(paramsCmd)
@@ -82,8 +74,10 @@ struct XcodebuildCommand {
 
 struct PackageHepler: ParsableCommand {
     
-    @Option(name: .shortAndLong, help: "The xcode-package version")
-    var version = "0.0.1"
+    static var configuration: CommandConfiguration = .init(
+        abstract: "A Xcode Package Tool",
+        version: "0.0.1"
+    )
     
     @Option(name: .shortAndLong, help: "The Products built with Debug or Release.")
     var release = true
@@ -135,10 +129,29 @@ extension PackageHepler {
         return (fileExist, dir_url)
     }
     
+    private var serializeProjectParams: XcodebuildCommand.Params? {
+        if project.hasSuffix(".xcodeproj") {
+            return .init(key: "project", value: project, kind: .option)
+        } else if project.hasSuffix(".xcworkspace") {
+            return .init(key: "workspace", value: project, kind: .option)
+        }
+        return nil
+    }
+    
+    private var serializeSchemeParams: XcodebuildCommand.Params? {
+        if scheme.isEmpty { return nil }
+        return .init(key: "scheme", value: scheme, kind: .option)
+    }
+    
+    private var projectParams: [XcodebuildCommand.Params] {
+        guard let projectParams = serializeProjectParams,
+              let schemeParams = serializeSchemeParams else { return [] }
+        return [projectParams, schemeParams]
+    }
+    
     private func cleanProject() {
         let buildCmd = XcodebuildCommand(option: "clean",
-                                         project: project,
-                                         scheme: scheme).executedCmd
+                                         params: projectParams).executedCmd
         let result = Process.process(buildCmd)
         if !result.contains("** CLEAN SUCCEEDED **") {
             PackageHepler.exit(withError: result.red)
@@ -146,18 +159,21 @@ extension PackageHepler {
     }
     
     private func checkProjectMachOType() -> String {
-        let cmd = "xcodebuild -project \(project) -showBuildSettings"
+        guard let projectParams = serializeProjectParams else { return "" }
+        let cmd = XcodebuildCommand(params: [
+                                        projectParams,
+                                        .init(key: "showBuildSettings",
+                                              value: "",
+                                              kind: .option)
+                                    ]).executedCmd
         let result = Process.process(cmd)
         let regexText = "MACH_O_TYPE = [0-9a-z-A-Z_]+"
         do {
             let regex = try NSRegularExpression(pattern: regexText, options: [.caseInsensitive])
             let results = regex.matches(in: result, range: NSRange(location: 0, length: result.count))
-            guard let checkResult = results.first else { return "" }
-            let ns_range = checkResult.range
-            let range = (ns_range.location..<ns_range.length + ns_range.location)
-            let index1 = result.index(result.startIndex, offsetBy: range.lowerBound)
-            let index2 = result.index(result.startIndex, offsetBy: range.upperBound)
-            let subText = String(result[index1..<index2]).replacingOccurrences(of: " ", with: "")
+            guard let checkResult = results.first,
+                  let range = Range<String.Index>(checkResult.range, in: result) else { return "" }
+            let subText = String(result[range]).replacingOccurrences(of: " ", with: "")
             guard let s = subText.split(separator: "=").last else { return "" }
             return String(s)
         } catch {
@@ -171,29 +187,25 @@ extension PackageHepler {
         let archivePlatforms = [Platform.ios_device, Platform.ios_simulator]
         let frameworkPaths = archivePlatforms.map { archivePlatform -> String in
             let archivePath = "\(outputPath)/\(scheme)-\(archivePlatform.name).xcarchive"
+            let params = [projectParams, [.init(key: "configuration",
+                                                value: config,
+                                                kind: .option),
+                                          .init(key: "destination",
+                                                value: archivePlatform.generic,
+                                                kind: .option),
+                                          .init(key: "archivePath",
+                                                value: archivePath,
+                                                kind: .option),
+                                          .init(key: "SKIP_INSTALL",
+                                                value: "NO",
+                                                kind: .argument),
+                                          .init(key: "BUILD_LIBRARY_FOR_DISTRIBUTION",
+                                                value: "YES",
+                                                kind: .argument)]].flatMap { $0 }
             let archiveCmd = XcodebuildCommand(option: "archive",
-                                               project: project,
-                                               scheme: scheme,
-                                               params: [
-                                                .init(key: "configuration",
-                                                      value: config,
-                                                      kind: .option),
-                                                .init(key: "destination",
-                                                      value: archivePlatform.generic,
-                                                      kind: .option),
-                                                .init(key: "archivePath",
-                                                      value: archivePath,
-                                                      kind: .option),
-                                                .init(key: "SKIP_INSTALL",
-                                                      value: "NO",
-                                                      kind: .argument),
-                                                .init(key: "BUILD_LIBRARY_FOR_DISTRIBUTION",
-                                                      value: "YES",
-                                                      kind: .argument)
-                                               ])
-            let cmd = archiveCmd.executedCmd
-            log(message: .tips(content: cmd))
-            let result = Process.process(cmd)
+                                               params: params).executedCmd
+            log(message: .tips(content: archiveCmd))
+            let result = Process.process(archiveCmd)
             if !result.contains("** ARCHIVE SUCCEEDED **") {
                 PackageHepler.exit(withError: result.red)
             }
@@ -214,11 +226,12 @@ extension PackageHepler {
                 PackageHepler.exit(withError: error)
             }
         }
-        var buildCmd = "xcodebuild -create-xcframework "
-        frameworkPaths.forEach { frameworkPath in
-            buildCmd.append("-framework \(frameworkPath) ")
+        var params = frameworkPaths.map {
+            XcodebuildCommand.Params(key: "framework", value: $0, kind: .option)
         }
-        buildCmd.append("-output \(output)")
+        params.append(.init(key: "output", value: output, kind: .option))
+        let buildCmd = XcodebuildCommand(option: "-create-xcframework",
+                                         params: params).executedCmd
         let result = Process.process(buildCmd)
         if !result.isEmpty && !result.contains("successfully") {
             PackageHepler.exit(withError: result)
@@ -227,6 +240,13 @@ extension PackageHepler {
     }
 }
 
-//PackageHepler.main()
+#if DEBUG
+
 PackageHepler.main(["/Users/cc/Desktop/LocalLab/TestXCFrw/TestXCFrw.xcodeproj", "TestXCFrw"])
-//PackageHepler.main(["/Users/xiehongbiao123/Desktop/iOSDemo/TestFrw/TestFrw.xcodeproj", "TestFrw"])
+PackageHepler.main(["/Users/xiehongbiao123/Desktop/iOSDemo/TestFrw/TestFrw.xcodeproj", "TestFrw"])
+
+#else
+
+PackageHepler.main()
+
+#endif
