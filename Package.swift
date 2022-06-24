@@ -4,12 +4,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "xcode-pacakge",
+    name: "xcode-package",
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
         .executable(
-            name: "xcode-pacakge",
-            targets: ["xcode-pacakge"]),
+            name: "xcode-package",
+            targets: ["xcode-package"]),
     ],
     dependencies: [
         // Dependencies declare other packages that this package depends on.
@@ -20,7 +20,7 @@ let package = Package(
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
         // Targets can depend on other targets in this package, and on products in packages this package depends on.
-        .executableTarget(name: "xcode-pacakge",
+        .executableTarget(name: "xcode-package",
                           dependencies: [
                             .product(name: "ArgumentParser",
                                      package: "swift-argument-parser"),
@@ -28,7 +28,7 @@ let package = Package(
                                      package: "Rainbow")
                           ]),
         .testTarget(
-            name: "xcode-pacakgeTests",
-            dependencies: ["xcode-pacakge"]),
+            name: "xcode-packageTests",
+            dependencies: ["xcode-package"]),
     ]
 )
