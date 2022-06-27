@@ -2,6 +2,7 @@
 import Foundation
 import ArgumentParser
 import Rainbow
+import XHBFoundationSwiftLib
 
 extension String: Error {}
 
@@ -172,10 +173,10 @@ extension PackageHepler {
             let regex = try NSRegularExpression(pattern: regexText, options: [.caseInsensitive])
             let results = regex.matches(in: result, range: NSRange(location: 0, length: result.count))
             guard let checkResult = results.first,
-                  let range = Range<String.Index>(checkResult.range, in: result) else { return "" }
-            let subText = String(result[range]).replacingOccurrences(of: " ", with: "")
-            guard let s = subText.split(separator: "=").last else { return "" }
-            return String(s)
+                  var target = result[checkResult.range] else { return "" }
+            target = target.replacingOccurrences(of: " ", with: "")
+            guard let mach_o_type = target.split(separator: "=").last else { return "" }
+            return String(mach_o_type)
         } catch {
             log(message: .failure(content: error))
             return ""
